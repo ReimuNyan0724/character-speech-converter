@@ -1,312 +1,210 @@
-<!DOCTYPE html>
+import os, zipfile, textwrap
+
+base = "/mnt/data/character-voice"
+os.makedirs(base, exist_ok=True)
+
+files = {
+"index.html": r'''<!doctype html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>キャラ口調変換所</title>
-<style>
-*{box-sizing:border-box}
-body{
-  margin:0;padding:18px;
-  background:#171522;color:#f6f3ff;
-  font-family:system-ui,sans-serif;
-}
-main{max-width:650px;margin:auto}
-h1{text-align:center;font-size:26px}
-.subtitle{text-align:center;color:#c8bddf}
-.card{
-  background:#242136;border:1px solid #49415e;
-  padding:16px;border-radius:14px;margin:16px 0;
-}
-label{display:block;margin:12px 0 6px;font-weight:bold}
-input,textarea,select{
-  width:100%;padding:12px;border-radius:9px;
-  border:1px solid #655a7d;background:#171522;
-  color:white;font:inherit;
-}
-textarea{min-height:110px;resize:vertical}
-button{
-  padding:12px;border:0;border-radius:9px;
-  font:inherit;font-weight:bold;cursor:pointer;
-  background:#b9a0ff;color:#201536;
-}
-.buttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.buttons button{flex:1}
-.secondary{background:#49415e;color:white}
-.danger{background:#8f394f;color:white}
-#result{white-space:pre-wrap;overflow-wrap:anywhere;min-height:55px}
-.note{font-size:13px;color:#c8bddf;line-height:1.7}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>CHARACTER VOICE | キャラクター口調変換</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main>
-<h1>🎭 キャラ口調変換所</h1>
-<p class="subtitle">あなたの文章をキャラクターの口調に！</p>
+  <header class="topbar">
+    <div class="brand-mark">CV</div>
+    <div>
+      <h1>CHARACTER VOICE</h1>
+      <p>キャラクター口調変換ツール</p>
+    </div>
+    <button id="themeBtn" class="icon-btn" aria-label="テーマ切替" title="テーマ切替">☼</button>
+  </header>
 
-<section class="card">
-<h2>📝 文章を変換</h2>
-<label for="character">キャラクター</label>
-<select id="character"></select>
+  <main class="app">
+    <section class="panel">
+      <div class="section-heading">
+        <div><span class="eyebrow">01 / CHARACTER</span><h2>キャラクター設定</h2></div>
+        <button id="manageBtn" class="secondary-btn">管理・登録</button>
+      </div>
+      <label for="characterSelect">キャラクター</label>
+      <select id="characterSelect"></select>
+      <div class="grid two">
+        <div><label for="emotionSelect">感情</label><select id="emotionSelect">
+          <option value="neutral">指定なし</option><option value="happy">喜び</option><option value="angry">怒り</option><option value="sad">悲しみ</option><option value="confused">困惑</option><option value="serious">真剣</option>
+        </select></div>
+        <div><label for="situationSelect">状況</label><select id="situationSelect">
+          <option value="daily">日常</option><option value="battle">戦闘</option><option value="chat">雑談</option><option value="urgent">緊急事態</option>
+        </select></div>
+      </div>
+      <div class="grid two">
+        <div><label for="personalitySelect">性格の強調</label><select id="personalitySelect">
+          <option value="default">登録設定どおり</option><option value="calm">冷静</option><option value="cheerful">明るい</option><option value="blunt">ぶっきらぼう</option><option value="polite">丁寧</option><option value="quiet">寡黙</option>
+        </select></div>
+        <div><label for="styleSelect">変換の強さ</label><select id="styleSelect">
+          <option value="light">弱め</option><option value="normal" selected>標準</option><option value="strong">強め</option>
+        </select></div>
+      </div>
+      <p id="characterSummary" class="hint"></p>
+    </section>
 
-<label for="source">変換したい文章</label>
-<textarea id="source" placeholder="例：私はあなたを守りたい。"></textarea>
+    <section class="panel">
+      <div class="section-heading">
+        <div><span class="eyebrow">02 / INPUT</span><h2>変換する文章</h2></div>
+        <button id="clearInputBtn" class="text-btn">消去</button>
+      </div>
+      <textarea id="inputText" rows="5" placeholder="例：今日は疲れたから、もう帰りたい。"></textarea>
+      <div class="row-between"><span id="inputCount" class="hint">0文字</span><button id="convertBtn" class="primary-btn">✦ 口調を変換する</button></div>
+    </section>
 
-<div class="buttons">
-<button id="convert">口調を変換！</button>
-<button id="clear" class="secondary">クリア</button>
-</div>
-</section>
+    <section class="panel result-panel">
+      <div class="section-heading">
+        <div><span class="eyebrow">03 / RESULT</span><h2>変換結果</h2></div>
+        <span class="status-dot">LOCAL</span>
+      </div>
+      <textarea id="outputText" rows="5" placeholder="変換結果がここに表示されます。" readonly></textarea>
+      <div class="button-row">
+        <button id="copyBtn" class="primary-btn">結果をコピー</button>
+        <button id="useResultBtn" class="secondary-btn">入力欄に戻す</button>
+        <button id="saveHistoryBtn" class="secondary-btn">履歴に保存</button>
+      </div>
+      <p class="hint">このツールは登録ルールによる変換です。AIのように文脈を完全に理解するものではありません。</p>
+    </section>
 
-<section class="card">
-<h2>✨ 変換結果</h2>
-<div id="result">ここに変換結果が表示されます。</div>
-<div class="buttons">
-<button id="copy">結果をコピー</button>
-<button id="again" class="secondary">再変換</button>
-</div>
-</section>
+    <section class="panel">
+      <div class="section-heading"><div><span class="eyebrow">04 / HISTORY</span><h2>最近の履歴</h2></div><button id="clearHistoryBtn" class="text-btn">履歴を削除</button></div>
+      <div id="historyList" class="history-list"><p class="hint">まだ履歴はありません。</p></div>
+    </section>
 
-<section class="card">
-<h2>⚙️ キャラクター管理</h2>
-<p class="note">キャラクターの名前や一人称、語尾などを設定できます。</p>
+    <footer>CHARACTER VOICE <span>設定・履歴はこのブラウザ内に保存されます。</span></footer>
+  </main>
 
-<label for="charName">キャラクター名</label>
-<input id="charName" placeholder="例：オリジナルキャラクター">
+  <dialog id="manageDialog">
+    <div class="dialog-head"><div><span class="eyebrow">CHARACTER STUDIO</span><h2>キャラクター管理</h2></div><button id="closeManageBtn" class="icon-btn">✕</button></div>
+    <div class="manage-layout">
+      <div class="saved-characters"><h3>登録済み</h3><div id="characterList"></div><button id="newCharacterBtn" class="secondary-btn full">＋ 新規キャラクター</button></div>
+      <form id="characterForm">
+        <input type="hidden" id="characterId">
+        <label for="nameInput">キャラクター名 *</label><input id="nameInput" required maxlength="60" placeholder="例：オリジナルキャラ">
+        <label for="workInput">作品名・分類</label><input id="workInput" maxlength="80" placeholder="例：オリジナル">
+        <div class="grid two">
+          <div><label for="firstPersonInput">一人称</label><input id="firstPersonInput" maxlength="40" placeholder="私"></div>
+          <div><label for="secondPersonInput">二人称</label><input id="secondPersonInput" maxlength="40" placeholder="あなた"></div>
+        </div>
+        <label for="personalityInput">性格</label><input id="personalityInput" maxlength="160" placeholder="冷静、寡黙、観察力が高い">
+        <label for="speechInput">話し方・口調の説明</label><textarea id="speechInput" rows="3" maxlength="500" placeholder="短文を好む。語尾は簡潔。丁寧語は使わない。"></textarea>
+        <label for="rulesInput">置換ルール（1行に1つ）</label>
+        <textarea id="rulesInput" rows="5" placeholder="です。=>だ。&#10;ます。=>る。&#10;あなた=>お前"></textarea>
+        <p class="hint">書式：変換前=&gt;変換後。上から順に適用します。例：「こんにちは。=&gt;よぉ。」</p>
+        <div class="button-row"><button type="submit" class="primary-btn">保存する</button><button type="button" id="deleteCharacterBtn" class="danger-btn">削除</button></div>
+      </form>
+    </div>
+  </dialog>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="script.js"></script>
+</body>
+</html>''',
+"style.css": r''':root{--bg:#0b1020;--panel:#131b2d;--panel2:#19243a;--text:#edf2ff;--muted:#9aa8c3;--line:#2b3852;--accent:#8b7cff;--accent2:#4de0c1;--danger:#ff6e87;--shadow:0 18px 50px #0003}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#1b2850 0%,var(--bg) 55%);color:var(--text);font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;min-height:100vh}
+.topbar{display:flex;align-items:center;gap:12px;padding:20px max(18px,calc((100vw - 880px)/2));border-bottom:1px solid #ffffff12;background:#0b1020bb;position:sticky;top:0;z-index:2;backdrop-filter:blur(16px)}
+.brand-mark{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;font-weight:900;letter-spacing:-1px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#101426}
+h1{font-size:15px;letter-spacing:2px;margin:0} .topbar p{margin:3px 0 0;color:var(--muted);font-size:12px}.icon-btn{margin-left:auto;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:12px;padding:9px 12px;font-size:17px}
+.app{max-width:880px;margin:26px auto;padding:0 16px}.panel{background:linear-gradient(145deg,#151f34ee,#101728f2);border:1px solid var(--line);border-radius:22px;padding:22px;margin-bottom:16px;box-shadow:var(--shadow)}
+.section-heading,.row-between,.button-row,.dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.section-heading{margin-bottom:18px}.eyebrow{color:var(--accent2);font-size:10px;font-weight:800;letter-spacing:1.7px}h2{font-size:19px;margin:5px 0 0}h3{font-size:14px;margin:0 0 12px}
+label{display:block;font-size:12px;color:var(--muted);margin:13px 0 7px}input,select,textarea{width:100%;background:#0b1222;border:1px solid var(--line);color:var(--text);border-radius:12px;padding:12px 13px;font:inherit;outline:none}input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px #8b7cff22}textarea{resize:vertical;line-height:1.7}textarea::placeholder,input::placeholder{color:#697895}.grid{display:grid;gap:12px}.two{grid-template-columns:1fr 1fr}.hint{font-size:11px;line-height:1.7;color:var(--muted);margin:12px 0 0}.primary-btn,.secondary-btn,.danger-btn,.text-btn{border:0;border-radius:12px;padding:11px 15px;font-weight:750;cursor:pointer;font:inherit;font-size:13px}.primary-btn{background:linear-gradient(110deg,var(--accent),#6c8cff);color:white;box-shadow:0 8px 20px #6d70ff30}.secondary-btn{background:var(--panel2);color:var(--text);border:1px solid var(--line)}.danger-btn{background:#4a1e30;color:#ffb7c4;border:1px solid #77354a}.text-btn{background:transparent;color:var(--muted);padding:8px}.row-between{margin-top:12px}.row-between .hint{margin:0}.status-dot{font-size:10px;color:var(--accent2);border:1px solid #4de0c155;padding:5px 8px;border-radius:99px;letter-spacing:1px}.button-row{justify-content:flex-start;flex-wrap:wrap;margin-top:12px}.history-list{display:grid;gap:10px}.history-item{border:1px solid var(--line);background:#0b122277;border-radius:12px;padding:12px}.history-item strong{font-size:12px}.history-item p{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin:7px 0}.history-item button{font-size:11px;padding:6px 9px}footer{text-align:center;color:var(--muted);font-size:10px;padding:20px}footer span{display:block;margin-top:5px}
+dialog{width:min(900px,calc(100% - 20px));max-height:90vh;overflow:auto;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:var(--shadow)}dialog::backdrop{background:#030610cc;backdrop-filter:blur(5px)}.dialog-head{margin-bottom:15px}.dialog-head .icon-btn{margin-left:0}.manage-layout{display:grid;grid-template-columns:220px 1fr;gap:20px}.saved-characters{border-right:1px solid var(--line);padding-right:14px}.character-choice{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;color:var(--text);border-radius:10px;padding:10px;margin-bottom:5px;cursor:pointer}.character-choice.active,.character-choice:hover{background:var(--panel2);border-color:var(--line)}.character-choice small{display:block;color:var(--muted);margin-top:3px}.full{width:100%;margin-top:8px}.toast{position:fixed;bottom:20px;left:50%;transform:translate(-50%,20px);opacity:0;background:#e8fff8;color:#10221f;padding:11px 17px;border-radius:99px;font-size:13px;font-weight:700;transition:.2s;z-index:5;pointer-events:none}.toast.show{opacity:1;transform:translate(-50%,0)}
+body.light{--bg:#edf1fa;--panel:#fff;--panel2:#f0f2ff;--text:#202943;--muted:#68728b;--line:#d7ddec;--shadow:0 12px 35px #24304b12;background:radial-gradient(ellipse at top,#dfe5ff,#f5f7fc 60%)}body.light .topbar{background:#f5f7fadd}body.light .panel{background:#ffffffed}body.light input,body.light select,body.light textarea{background:#f7f8fc;color:#202943}
+@media(max-width:600px){.topbar{padding:14px 16px}.app{margin:15px auto;padding:0 10px}.panel{padding:16px;border-radius:18px}.two{grid-template-columns:1fr 1fr;gap:9px}.section-heading{align-items:flex-start}h2{font-size:17px}.row-between{align-items:flex-start;flex-direction:column}.row-between .primary-btn{width:100%}.button-row>*{flex:1}.manage-layout{grid-template-columns:1fr}.saved-characters{border-right:0;border-bottom:1px solid var(--line);padding:0 0 14px}.dialog-head h2{font-size:18px}}
+@media(max-width:360px){.two{grid-template-columns:1fr}.button-row{flex-direction:column}.button-row>*{width:100%}}
+''',
+"script.js": r'''const STORAGE_KEY = "characterVoice.characters.v1";
+const HISTORY_KEY = "characterVoice.history.v1";
 
-<label for="first">一人称</label>
-<input id="first" placeholder="例：私">
-
-<label for="second">二人称</label>
-<input id="second" placeholder="例：あなた">
-
-<label for="ending">語尾・口調</label>
-<input id="ending" placeholder="例：なのだ">
-
-<label for="rules">追加ルール（任意）</label>
-<textarea id="rules" placeholder="例：です→である、ます→る"></textarea>
-
-<div class="buttons">
-<button id="save">キャラクターを保存</button>
-<button id="reset" class="secondary">入力をリセット</button>
-</div>
-
-<h3>登録済みキャラクター</h3>
-<div id="manage"></div>
-</section>
-
-<p class="note">
-※この試作版はルール変換方式です。文章の意味をAIのように理解する機能はありません。<br>
-※登録データは現在のブラウザ内に保存されます。別の端末との共有機能は、今後追加します。
-</p>
-</main>
-
-<script>
 const defaults = [
-  {
-    id:"don",
-    name:"ドンキホーテ風（サンプル）",
-    first:"当人",
-    second:"そなた",
-    ending:"である！",
-    rules:""
-  },
-  {
-    id:"cool",
-    name:"クールな口調（サンプル）",
-    first:"私",
-    second:"あなた",
-    ending:"だ。",
-    rules:"です→だ。\nます→る。"
-  }
+  {id:"sample-ryoshu",name:"良秀（サンプル）",work:"Limbus Company / サンプル設定",first:"私",second:"お前",personality:"冷静・寡黙・芸術家気質",speech:"短文を好む。冗長な表現を避け、短く鋭い言い回しを使う。これは再現用の簡易サンプル。",rules:"今日は=>本日。\n疲れた=>疲労。\n帰りたい=>帰還する。\nもう帰りたい=>帰還する。\nです。=>だ。\nます。=>る。"},
+  {id:"sample-cheerful",name:"明るいキャラ（サンプル）",work:"オリジナル用テンプレート",first:"私",second:"きみ",personality:"明るい・親しみやすい",speech:"明るく親しみやすい。語尾に感情を乗せる。",rules:"こんにちは=>やっほー！\nありがとう=>ありがとね！\nです。=>だよ！\nます。=>るね！"},
+  {id:"sample-polite",name:"丁寧なキャラ（サンプル）",work:"オリジナル用テンプレート",first:"私",second:"あなた",personality:"礼儀正しい・落ち着いている",speech:"丁寧で落ち着いた敬語。",rules:"お前=>あなた\nだよ。=>です。\nだね。=>ですね。\nしてくれ=>してください"}
 ];
 
-let chars = [];
-let editingId = null;
-let lastSource = "";
-
+let characters = loadCharacters();
+let history = loadHistory();
+let selectedId = characters[0]?.id;
 const $ = id => document.getElementById(id);
 
-function load(){
-  try{
-    const saved=localStorage.getItem("speech_chars_v1");
-    chars=saved ? JSON.parse(saved) : defaults.map(x=>({...x}));
-    if(!Array.isArray(chars)) throw Error();
-  }catch(e){
-    chars=defaults.map(x=>({...x}));
+function loadCharacters(){try{const v=JSON.parse(localStorage.getItem(STORAGE_KEY));return Array.isArray(v)&&v.length?v:structuredClone(defaults)}catch{return structuredClone(defaults)}}
+function saveCharacters(){localStorage.setItem(STORAGE_KEY,JSON.stringify(characters))}
+function loadHistory(){try{return JSON.parse(localStorage.getItem(HISTORY_KEY))||[]}catch{return []}}
+function saveHistoryData(){localStorage.setItem(HISTORY_KEY,JSON.stringify(history.slice(0,20)))}
+function selectedCharacter(){return characters.find(c=>c.id=== $("characterSelect").value)||characters[0]}
+function escapeHtml(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function toast(message){const el=$("toast");el.textContent=message;el.classList.add("show");clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove("show"),2200)}
+function renderSelect(){const select=$("characterSelect");select.innerHTML=characters.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join("");if(characters.some(c=>c.id===selectedId))select.value=selectedId;renderSummary()}
+function renderSummary(){const c=selectedCharacter();$("characterSummary").textContent=c?`${c.work||"分類なし"}｜一人称：${c.first||"未設定"}｜二人称：${c.second||"未設定"}｜${c.personality||"性格未設定"}`:"キャラクターを登録してください。"}
+function replaceAllLiteral(text,from,to){return from?text.split(from).join(to):text}
+function convertText(){
+  const original=$("inputText").value;
+  if(!original.trim()){toast("変換する文章を入力してください");return}
+  const c=selectedCharacter();if(!c){toast("キャラクターを登録してください");return}
+  let result=original;
+  const strength=$("styleSelect").value;
+  const rules=(c.rules||"").split(/\n/).map(line=>{const i=line.indexOf("=>");return i<0?null:[line.slice(0,i).trim(),line.slice(i+2).trim()]}).filter(r=>r&&r[0]);
+  if(strength==="light"){rules.slice(0,Math.ceil(rules.length/2)).forEach(([a,b])=>result=replaceAllLiteral(result,a,b))}
+  else rules.forEach(([a,b])=>result=replaceAllLiteral(result,a,b));
+  if(strength==="strong"){
+    if(c.first && c.first!=="私" && !result.startsWith(c.first+"：")) result=result.replace(/^(私は|僕は|俺は|私は|私が|僕が|俺が)/,c.first+"は");
+    if(c.second && c.second!=="あなた") result=replaceAllLiteral(result,"あなた",c.second);
   }
-  render();
+  const emotion=$("emotionSelect").value, situation=$("situationSelect").value, personality=$("personalitySelect").value;
+  if(emotion==="happy" && !/[！!♪]$/.test(result.trim())) result=result.trim()+"！";
+  if(emotion==="angry" && !/[！!。]$/.test(result.trim())) result=result.trim()+"。";
+  if(emotion==="sad" && !/[………。]$/.test(result.trim())) result=result.trim()+"……";
+  if(emotion==="serious" && !/[。！？!?]$/.test(result.trim())) result=result.trim()+"。";
+  if(personality==="polite" && !/[。！？!?]$/.test(result.trim())) result=result.trim()+"。";
+  if(personality==="cheerful" && !/[！!♪]$/.test(result.trim())) result=result.trim()+"！";
+  if(personality==="quiet") result=result.replace(/！+/g,"。").replace(/です。/g,"です。");
+  if(situation==="battle") result=result.replace(/お願いします/g,"頼む").replace(/危ない/g,"危険だ");
+  if(situation==="urgent") result=result.replace(/してください/g,"してくれ").replace(/お願いします/g,"頼む");
+  $("outputText").value=result;
+  toast("口調を変換しました");
+}
+function renderHistory(){const el=$("historyList");if(!history.length){el.innerHTML='<p class="hint">まだ履歴はありません。</p>';return}el.innerHTML=history.slice(0,8).map((h,i)=>`<article class="history-item"><strong>${escapeHtml(h.name)} · ${escapeHtml(h.date)}</strong><p>${escapeHtml(h.output)}</p><div class="button-row"><button class="secondary-btn" data-history-copy="${i}">コピー</button><button class="secondary-btn" data-history-use="${i}">入力に戻す</button></div></article>`).join("")}
+function openManage(){renderCharacterList();$("manageDialog").showModal()}
+function renderCharacterList(){const list=$("characterList");list.innerHTML=characters.map(c=>`<button class="character-choice ${c.id===$("characterId").value?"active":""}" data-edit-id="${escapeHtml(c.id)}">${escapeHtml(c.name)}<small>${escapeHtml(c.work||"分類なし")}</small></button>`).join("")}
+function resetForm(){ $("characterForm").reset();$("characterId").value="";$("deleteCharacterBtn").disabled=true;renderCharacterList()}
+function fillForm(c){$("characterId").value=c.id;$("nameInput").value=c.name||"";$("workInput").value=c.work||"";$("firstPersonInput").value=c.first||"";$("secondPersonInput").value=c.second||"";$("personalityInput").value=c.personality||"";$("speechInput").value=c.speech||"";$("rulesInput").value=c.rules||"";$("deleteCharacterBtn").disabled=false;renderCharacterList()}
+function saveCharacter(e){e.preventDefault();const id=$("characterId").value||("custom-"+Date.now());const c={id,name:$("nameInput").value.trim(),work:$("workInput").value.trim(),first:$("firstPersonInput").value.trim(),second:$("secondPersonInput").value.trim(),personality:$("personalityInput").value.trim(),speech:$("speechInput").value.trim(),rules:$("rulesInput").value};const idx=characters.findIndex(x=>x.id===id);if(idx>=0)characters[idx]=c;else characters.push(c);selectedId=id;saveCharacters();renderSelect();renderCharacterList();fillForm(c);toast("キャラクターを保存しました")}
+function deleteCharacter(){const id=$("characterId").value;if(!id)return;const c=characters.find(x=>x.id===id);if(!confirm(`「${c?.name||"このキャラクター"}」を削除しますか？`))return;characters=characters.filter(x=>x.id!==id);if(!characters.length)characters=[{id:"new-default",name:"新しいキャラクター",work:"オリジナル",first:"私",second:"あなた",personality:"",speech:"",rules:""}];selectedId=characters[0].id;saveCharacters();renderSelect();resetForm();toast("削除しました")}
+$("characterSelect").addEventListener("change",()=>{selectedId=$("characterSelect").value;renderSummary()});
+$("inputText").addEventListener("input",()=>$("inputCount").textContent=$("inputText").value.length+"文字");
+$("convertBtn").addEventListener("click",convertText);
+$("clearInputBtn").addEventListener("click",()=>{$("inputText").value="";$("inputCount").textContent="0文字"});
+$("copyBtn").addEventListener("click",async()=>{const t=$("outputText").value;if(!t){toast("コピーする結果がありません");return}try{await navigator.clipboard.writeText(t);toast("コピーしました")}catch{$("outputText").readOnly=false;$("outputText").select();document.execCommand("copy");$("outputText").readOnly=true;toast("コピーしました")}});
+$("useResultBtn").addEventListener("click",()=>{$("inputText").value=$("outputText").value;$("inputCount").textContent=$("inputText").value.length+"文字";toast("入力欄に戻しました")});
+$("saveHistoryBtn").addEventListener("click",()=>{if(!$("outputText").value){toast("保存する結果がありません");return}history.unshift({name:selectedCharacter()?.name||"不明",date:new Date().toLocaleString("ja-JP"),input:$("inputText").value,output:$("outputText").value});history=history.slice(0,20);saveHistoryData();renderHistory();toast("履歴に保存しました")});
+$("clearHistoryBtn").addEventListener("click",()=>{if(confirm("履歴をすべて削除しますか？")){history=[];saveHistoryData();renderHistory();toast("履歴を削除しました")}});
+$("manageBtn").addEventListener("click",()=>{resetForm();openManage()});
+$("closeManageBtn").addEventListener("click",()=>$("manageDialog").close());
+$("newCharacterBtn").addEventListener("click",resetForm);
+$("characterList").addEventListener("click",e=>{const b=e.target.closest("[data-edit-id]");if(!b)return;const c=characters.find(x=>x.id===b.dataset.editId);if(c)fillForm(c)});
+$("characterForm").addEventListener("submit",saveCharacter);
+$("deleteCharacterBtn").addEventListener("click",deleteCharacter);
+$("historyList").addEventListener("click",async e=>{const cp=e.target.closest("[data-history-copy]");const use=e.target.closest("[data-history-use]");if(cp){const h=history[Number(cp.dataset.historyCopy)];if(h){try{await navigator.clipboard.writeText(h.output);toast("コピーしました")}catch{toast("コピーできませんでした")}}}if(use){const h=history[Number(use.dataset.historyUse)];if(h){$("inputText").value=h.input;$("outputText").value=h.output;$("inputCount").textContent=h.input.length+"文字";window.scrollTo({top:0,behavior:"smooth"})}}});
+$("themeBtn").addEventListener("click",()=>{document.body.classList.toggle("light");localStorage.setItem("characterVoice.light",document.body.classList.contains("light")?"1":"0")});
+if(localStorage.getItem("characterVoice.light")==="1")document.body.classList.add("light");
+if(!localStorage.getItem(STORAGE_KEY))saveCharacters();
+renderSelect();renderHistory();$("deleteCharacterBtn").disabled=true;
+'''
 }
 
-function persist(){
-  try{
-    localStorage.setItem("speech_chars_v1",JSON.stringify(chars));
-    return true;
-  }catch(e){
-    alert("保存できませんでした。ブラウザの保存容量や設定を確認してください。");
-    return false;
-  }
-}
+for name, content in files.items():
+    with open(os.path.join(base, name), "w", encoding="utf-8") as f:
+        f.write(content)
 
-function render(){
-  const select=$("character");
-  const old=select.value;
-  select.innerHTML="";
-  chars.forEach(c=>{
-    const opt=document.createElement("option");
-    opt.value=c.id;
-    opt.textContent=c.name;
-    select.appendChild(opt);
-  });
-  if(chars.some(c=>c.id===old)) select.value=old;
+zip_path = "/mnt/data/character-voice.zip"
+with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+    for name in files:
+        z.write(os.path.join(base, name), arcname=f"character-voice/{name}")
 
-  const manage=$("manage");
-  manage.innerHTML="";
-  chars.forEach(c=>{
-    const row=document.createElement("div");
-    row.style.cssText="padding:10px 0;border-bottom:1px solid #49415e";
-    const name=document.createElement("strong");
-    name.textContent=c.name+" ";
-    row.appendChild(name);
-
-    const edit=document.createElement("button");
-    edit.textContent="編集";
-    edit.className="secondary";
-    edit.style.margin="5px";
-    edit.onclick=()=>editChar(c.id);
-    row.appendChild(edit);
-
-    if(!c.builtin){
-      const del=document.createElement("button");
-      del.textContent="削除";
-      del.className="danger";
-      del.style.margin="5px";
-      del.onclick=()=>{
-        if(confirm("このキャラクターを削除しますか？")){
-          chars=chars.filter(x=>x.id!==c.id);
-          persist();render();
-        }
-      };
-      row.appendChild(del);
-    }
-    manage.appendChild(row);
-  });
-}
-
-function editChar(id){
-  const c=chars.find(x=>x.id===id);
-  if(!c)return;
-  editingId=id;
-  $("charName").value=c.name;
-  $("first").value=c.first;
-  $("second").value=c.second;
-  $("ending").value=c.ending;
-  $("rules").value=c.rules||"";
-  $("save").textContent="変更を保存";
-  $("charName").scrollIntoView({behavior:"smooth",block:"center"});
-}
-
-function convertText(text,c){
-  let result=text;
-  const first=c.first.trim();
-  const second=c.second.trim();
-
-  if(first) result=result.replace(/私/g,first);
-  if(second) result=result.replace(/あなた/g,second);
-
-  const rules=(c.rules||"").split(/\n/);
-  for(const rule of rules){
-    const pos=rule.indexOf("→");
-    if(pos<0)continue;
-    const from=rule.slice(0,pos);
-    const to=rule.slice(pos+1);
-    if(from) result=result.split(from).join(to);
-  }
-
-  const ending=c.ending.trim();
-  if(ending && result && !/[！!。？?…]$/.test(result)){
-    result+=ending;
-  }
-  return result;
-}
-
-$("convert").onclick=()=>{
-  const text=$("source").value.trim();
-  const c=chars.find(x=>x.id===$("character").value);
-  if(!text){alert("変換したい文章を入力してください。");return;}
-  if(!c){alert("キャラクターを選択してください。");return;}
-  lastSource=text;
-  $("result").textContent=convertText(text,c);
-};
-
-$("clear").onclick=()=>{
-  $("source").value="";
-  $("result").textContent="ここに変換結果が表示されます。";
-};
-
-$("copy").onclick=async()=>{
-  const text=$("result").textContent;
-  if(!text || text==="ここに変換結果が表示されます。"){
-    alert("先に文章を変換してください。");return;
-  }
-  try{
-    await navigator.clipboard.writeText(text);
-    alert("コピーしました！");
-  }catch(e){
-    alert("コピーできませんでした。結果を長押ししてコピーしてください。");
-  }
-};
-
-$("again").onclick=()=>{
-  if(!lastSource){alert("先に文章を変換してください。");return;}
-  const c=chars.find(x=>x.id===$("character").value);
-  if(c)$("result").textContent=convertText(lastSource,c);
-};
-
-$("save").onclick=()=>{
-  const name=$("charName").value.trim();
-  if(!name){alert("キャラクター名を入力してください。");return;}
-
-  const c={
-    id:editingId||("user_"+Date.now()),
-    name,
-    first:$("first").value,
-    second:$("second").value,
-    ending:$("ending").value,
-    rules:$("rules").value
-  };
-
-  if(editingId){
-    const i=chars.findIndex(x=>x.id===editingId);
-    if(i>=0)chars[i]=c;
-  }else{
-    chars.push(c);
-  }
-
-  if(persist()){
-    editingId=null;
-    $("charName").value="";
-    $("first").value="";
-    $("second").value="";
-    $("ending").value="";
-    $("rules").value="";
-    $("save").textContent="キャラクターを保存";
-    render();
-    $("character").value=c.id;
-    alert("キャラクターを保存しました！");
-  }
-};
-
-$("reset").onclick=()=>{
-  editingId=null;
-  $("charName").value="";
-  $("first").value="";
-  $("second").value="";
-  $("ending").value="";
-  $("rules").value="";
-  $("save").textContent="キャラクターを保存";
-};
-
-load();
-</script>
-</body>
-</html>
+print("Created:", zip_path)
