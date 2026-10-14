@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>キャラ口調変換所</title>
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;padding:18px;
+  background:#171522;color:#f6f3ff;
+  font-family:system-ui,sans-serif;
+}
+main{max-width:650px;margin:auto}
+h1{text-align:center;font-size:26px}
+.subtitle{text-align:center;color:#c8bddf}
+.card{
+  background:#242136;border:1px solid #49415e;
+  padding:16px;border-radius:14px;margin:16px 0;
+}
+label{display:block;margin:12px 0 6px;font-weight:bold}
+input,textarea,select{
+  width:100%;padding:12px;border-radius:9px;
+  border:1px solid #655a7d;background:#171522;
+  color:white;font:inherit;
+}
+textarea{min-height:110px;resize:vertical}
+button{
+  padding:12px;border:0;border-radius:9px;
+  font:inherit;font-weight:bold;cursor:pointer;
+  background:#b9a0ff;color:#201536;
+}
+.buttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.buttons button{flex:1}
+.secondary{background:#49415e;color:white}
+.danger{background:#8f394f;color:white}
+#result{white-space:pre-wrap;overflow-wrap:anywhere;min-height:55px}
+.note{font-size:13px;color:#c8bddf;line-height:1.7}
+</style>
+</head>
+<body>
+<main>
+<h1>🎭 キャラ口調変換所</h1>
+<p class="subtitle">あなたの文章をキャラクターの口調に！</p>
+
+<section class="card">
+<h2>📝 文章を変換</h2>
+<label for="character">キャラクター</label>
+<select id="character"></select>
+
+<label for="source">変換したい文章</label>
+<textarea id="source" placeholder="例：私はあなたを守りたい。"></textarea>
+
+<div class="buttons">
+<button id="convert">口調を変換！</button>
+<button id="clear" class="secondary">クリア</button>
+</div>
+</section>
+
+<section class="card">
+<h2>✨ 変換結果</h2>
+<div id="result">ここに変換結果が表示されます。</div>
+<div class="buttons">
+<button id="copy">結果をコピー</button>
+<button id="again" class="secondary">再変換</button>
+</div>
+</section>
+
+<section class="card">
+<h2>⚙️ キャラクター管理</h2>
+<p class="note">キャラクターの名前や一人称、語尾などを設定できます。</p>
+
+<label for="charName">キャラクター名</label>
+<input id="charName" placeholder="例：オリジナルキャラクター">
+
+<label for="first">一人称</label>
+<input id="first" placeholder="例：私">
+
+<label for="second">二人称</label>
+<input id="second" placeholder="例：あなた">
+
+<label for="ending">語尾・口調</label>
+<input id="ending" placeholder="例：なのだ">
+
+<label for="rules">追加ルール（任意）</label>
+<textarea id="rules" placeholder="例：です→である、ます→る"></textarea>
+
+<div class="buttons">
+<button id="save">キャラクターを保存</button>
+<button id="reset" class="secondary">入力をリセット</button>
+</div>
+
+<h3>登録済みキャラクター</h3>
+<div id="manage"></div>
+</section>
+
+<p class="note">
+※この試作版はルール変換方式です。文章の意味をAIのように理解する機能はありません。<br>
+※登録データは現在のブラウザ内に保存されます。別の端末との共有機能は、今後追加します。
+</p>
+</main>
+
+<script>
+const defaults = [
+  {
+    id:"don",
+    name:"ドンキホーテ風（サンプル）",
+    first:"当人",
+    second:"そなた",
+    ending:"である！",
+    rules:""
+  },
+  {
+    id:"cool",
+    name:"クールな口調（サンプル）",
+    first:"私",
+    second:"あなた",
+    ending:"だ。",
+    rules:"です→だ。\nます→る。"
+  }
+];
+
+let chars = [];
+let editingId = null;
+let lastSource = "";
+
+const $ = id => document.getElementById(id);
+
+function load(){
+  try{
+    const saved=localStorage.getItem("speech_chars_v1");
+    chars=saved ? JSON.parse(saved) : defaults.map(x=>({...x}));
+    if(!Array.isArray(chars)) throw Error();
+  }catch(e){
+    chars=defaults.map(x=>({...x}));
+  }
+  render();
+}
+
+function persist(){
+  try{
+    localStorage.setItem("speech_chars_v1",JSON.stringify(chars));
+    return true;
+  }catch(e){
+    alert("保存できませんでした。ブラウザの保存容量や設定を確認してください。");
+    return false;
+  }
+}
+
+function render(){
+  const select=$("character");
+  const old=select.value;
+  select.innerHTML="";
+  chars.forEach(c=>{
+    const opt=document.createElement("option");
+    opt.value=c.id;
+    opt.textContent=c.name;
+    select.appendChild(opt);
+  });
+  if(chars.some(c=>c.id===old)) select.value=old;
+
+  const manage=$("manage");
+  manage.innerHTML="";
+  chars.forEach(c=>{
+    const row=document.createElement("div");
+    row.style.cssText="padding:10px 0;border-bottom:1px solid #49415e";
+    const name=document.createElement("strong");
+    name.textContent=c.name+" ";
+    row.appendChild(name);
+
+    const edit=document.createElement("button");
+    edit.textContent="編集";
+    edit.className="secondary";
+    edit.style.margin="5px";
+    edit.onclick=()=>editChar(c.id);
+    row.appendChild(edit);
+
+    if(!c.builtin){
+      const del=document.createElement("button");
+      del.textContent="削除";
+      del.className="danger";
+      del.style.margin="5px";
+      del.onclick=()=>{
+        if(confirm("このキャラクターを削除しますか？")){
+          chars=chars.filter(x=>x.id!==c.id);
+          persist();render();
+        }
+      };
+      row.appendChild(del);
+    }
+    manage.appendChild(row);
+  });
+}
+
+function editChar(id){
+  const c=chars.find(x=>x.id===id);
+  if(!c)return;
+  editingId=id;
+  $("charName").value=c.name;
+  $("first").value=c.first;
+  $("second").value=c.second;
+  $("ending").value=c.ending;
+  $("rules").value=c.rules||"";
+  $("save").textContent="変更を保存";
+  $("charName").scrollIntoView({behavior:"smooth",block:"center"});
+}
+
+function convertText(text,c){
+  let result=text;
+  const first=c.first.trim();
+  const second=c.second.trim();
+
+  if(first) result=result.replace(/私/g,first);
+  if(second) result=result.replace(/あなた/g,second);
+
+  const rules=(c.rules||"").split(/\n/);
+  for(const rule of rules){
+    const pos=rule.indexOf("→");
+    if(pos<0)continue;
+    const from=rule.slice(0,pos);
+    const to=rule.slice(pos+1);
+    if(from) result=result.split(from).join(to);
+  }
+
+  const ending=c.ending.trim();
+  if(ending && result && !/[！!。？?…]$/.test(result)){
+    result+=ending;
+  }
+  return result;
+}
+
+$("convert").onclick=()=>{
+  const text=$("source").value.trim();
+  const c=chars.find(x=>x.id===$("character").value);
+  if(!text){alert("変換したい文章を入力してください。");return;}
+  if(!c){alert("キャラクターを選択してください。");return;}
+  lastSource=text;
+  $("result").textContent=convertText(text,c);
+};
+
+$("clear").onclick=()=>{
+  $("source").value="";
+  $("result").textContent="ここに変換結果が表示されます。";
+};
+
+$("copy").onclick=async()=>{
+  const text=$("result").textContent;
+  if(!text || text==="ここに変換結果が表示されます。"){
+    alert("先に文章を変換してください。");return;
+  }
+  try{
+    await navigator.clipboard.writeText(text);
+    alert("コピーしました！");
+  }catch(e){
+    alert("コピーできませんでした。結果を長押ししてコピーしてください。");
+  }
+};
+
+$("again").onclick=()=>{
+  if(!lastSource){alert("先に文章を変換してください。");return;}
+  const c=chars.find(x=>x.id===$("character").value);
+  if(c)$("result").textContent=convertText(lastSource,c);
+};
+
+$("save").onclick=()=>{
+  const name=$("charName").value.trim();
+  if(!name){alert("キャラクター名を入力してください。");return;}
+
+  const c={
+    id:editingId||("user_"+Date.now()),
+    name,
+    first:$("first").value,
+    second:$("second").value,
+    ending:$("ending").value,
+    rules:$("rules").value
+  };
+
+  if(editingId){
+    const i=chars.findIndex(x=>x.id===editingId);
+    if(i>=0)chars[i]=c;
+  }else{
+    chars.push(c);
+  }
+
+  if(persist()){
+    editingId=null;
+    $("charName").value="";
+    $("first").value="";
+    $("second").value="";
+    $("ending").value="";
+    $("rules").value="";
+    $("save").textContent="キャラクターを保存";
+    render();
+    $("character").value=c.id;
+    alert("キャラクターを保存しました！");
+  }
+};
+
+$("reset").onclick=()=>{
+  editingId=null;
+  $("charName").value="";
+  $("first").value="";
+  $("second").value="";
+  $("ending").value="";
+  $("rules").value="";
+  $("save").textContent="キャラクターを保存";
+};
+
+load();
+</script>
+</body>
+</html>
